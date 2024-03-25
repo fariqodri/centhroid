@@ -1,0 +1,225 @@
+{% load macro %}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Centhroid: The Center of Fun</title>
+    <link rel="icon" type="image/x-icon" href="https://storage.googleapis.com/centhroid/favicon.ico">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="description" content="Our midpoint calculator and mapping tool enables you to easily calculate the midpoint of multiple locations and visualize them on a map. Make informed decisions and optimize your location-based planning with our user-friendly tool. Try it now and discover the power of location-based insights. #locationplanning #mappingtool">
+</head>
+
+<style>
+    .marker-center {
+        font-weight: 600;
+    }
+
+    .marker-location {
+        font-weight: 500;
+    }
+
+    @media (min-width: 768px) {
+        #map {
+            height: 450px;
+        }
+    } 
+    
+    #map {
+        height: 500px;
+    }
+</style>
+
+<body>
+    <header class="bg-gray-900 text-white">
+        <div class="container mx-auto px-4 py-2 flex justify-between items-center">
+            <a href="{% url 'index' %}" class="font-bold text-xl">Centhroid</a>
+            <nav class="md:flex md:items-center">
+              <a href="{% url 'features' %}" class="py-2 px-4">Features</a>
+            </nav>
+        </div>
+    </header>
+    <div class="container mx-auto mt-10">
+        <div class="bg-white p-5 rounded-md shadow-lg">
+            <h1 class="text-2xl font-bold text-center">Center Location</h1>
+            <div class="grid grid-cols-1 gap-4 my-4">
+                <div class="col-span-2 md:col-span-1 bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-lg font-semibold mb-2 md:mb-4">{{ center.address | capfirst }}</h2>
+                    <a class="mb-3 text-blue-500" target="_blank" href="{{ center.url }}">&#127919; Link to Google Maps</a>
+                    <div class="mt-3 md:mt-6" id="map"></div>
+                    
+                </div>
+            </div>
+            {% if nearby_places|length > 0 %}
+            <div class="border-t border-gray-300 mt-8 mb-8"></div>
+            <h1 class="text-2xl font-bold text-center">Recommended Meeting Places</h1>
+            <div class="grid grid-cols-2 gap-2 md:gap-4 my-2 md:my-4">
+                {% for place in nearby_places %}
+                <div class="col-span-2 md:col-span-1 bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-lg font-semibold mb-2 md:mb-4">{{ place.name }} (M{{ forloop.counter }})</h2>
+                    <p class="text-gray-600 mb-1">&#128205; {{ place.address }}</p>
+                    <b class="text-gray-600 mb-1">&#129521; {{ place.establishment_type.title }}</b>
+                    <p class="text-gray-600 mb-1">&#11088; {{ place.rating }} ({{ place.num_of_ratings }} ratings)</p>
+                    <a class="mb-1 text-blue-500" target="_blank" href="{{ place.url }}">&#128681; Link to Google Maps</a>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="border-t border-gray-300 mt-8 mb-8"></div>
+            <h1 class="text-2xl font-bold text-center">Input Locations</h1>
+            <div class="grid grid-cols-2 gap-2 md:gap-4 my-2 md:my-4">
+                {% for l in locations %}
+                {% if l is not none %}
+                <div class="col-span-2 md:col-span-1 bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-lg font-semibold mb-2 md:mb-4">{{ input_locations|return_item:forloop.counter0|title_persist }} ({{ l.0 }})</h2>
+                    <p class="text-gray-600 mb-1">&#128205; {{ l.1.address | capfirst }}</p>
+                    <a class="mb-1 text-blue-500" target="_blank" href="{{ l.1.url }}">&#128681; Link to Google Maps</a>
+                </div>
+                {% else %}
+                <div class="col-span-2 md:col-span-1 bg-white rounded-lg shadow-md p-6">
+                    <h2 class="text-lg font-semibold mb-2 md:mb-4 md:h-16 overflow-hidden">Location Not Found</h2>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            <div class="col-span-2">
+                <button
+                    class="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded hover:bg-blue-700 focus:outline-none focus:shadow-outline-blue mb-2 md:mb-4"
+                    id="copyURLButton">&#128203; Share Result</button>
+                <a href="{% url 'index' %}?{% for query in input_locations %}{% if not forloop.first %}&{% endif %}keyword={{ query|urlencode }}{% endfor %}&{% for query in input_establishments %}{% if not forloop.first %}&{% endif %}establishment={{ query.id|urlencode }}{% endfor %}">
+                    <button
+                    class="w-full bg-gray-200 font-bold py-2 px-4 rounded text-gray-700 hover:bg-gray-300 focus:outline-none focus:shadow-outline-blue mb-4">Back to Form</button>
+                </a>
+            </div>
+        </div>
+    </div>
+    <script>
+        const copyURLButton = document.querySelector('#copyURLButton')
+
+        function isMobile() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) && screen.width <= 768
+        }
+        async function initMap() {
+            // Create map, draw it in the targetElem and sets the cameraPosition
+            var targetElem = document.getElementById('map');
+            const zoom = isMobile() ? 14 : 13
+            var mapOptions = { 
+                zoom: zoom, 
+                center: { lat: {{ center.coordinate.0 }}, lng: {{ center.coordinate.1 }} },
+                mapId: '{{ map_id }}'
+            };
+            var map = new google.maps.Map(targetElem, mapOptions);
+            const { PinElement, AdvancedMarkerElement } = await google.maps.importLibrary("marker")
+
+            // We have already displayed the map, let's add markers
+
+            // Create markers in the map
+            var locations = [
+                {% for l in locations %}
+                {lat: {{ l.1.coordinate.0 }}, lng: {{ l.1.coordinate.1 }}},
+                {% endfor %}
+            ];
+            var meetingPlaces = [
+                {% for place in nearby_places %}
+                {
+                    name: '{{ place.name }}',
+                    coordinate: {
+                        lat: {{ place.coordinate.0 }},
+                        lng: {{ place.coordinate.1 }},
+                    },
+                    label: 'M{{ forloop.counter }}',
+                    rating: {{ place.rating }},
+                    reviews: {{ place.num_of_ratings }},
+                    address: '{{ place.address }}',
+                    url: '{{ place.url }}'
+                },
+                {% endfor %}
+            ]
+            
+            const asciiFirst = 65
+            for (var i = 0; i < locations.length; i++) {
+                let marker = new google.maps.Marker({
+                    position: locations[i],
+                    map: map,
+                    label: {
+                        text: `${String.fromCharCode(asciiFirst + i)}`,
+                        className: 'marker-location'
+                    }
+                });
+            }
+
+            for (var i = 0; i < meetingPlaces.length; i++) {
+                let meetingPlace = meetingPlaces[i]
+                const infoWindowContent = `
+                <div>
+                    <b>${meetingPlace.name}</b>
+                    <p>${meetingPlace.address}</p>
+                    <p>&#11088; ${meetingPlace.rating} (${meetingPlace.reviews} ratings)</p>
+                    <a href="${meetingPlace.url}" class="text-blue-500" target="_blank">View on Google Maps</a>
+                </div>
+                `
+                const infoWindow = new google.maps.InfoWindow();
+                const pin = new PinElement({
+                    background: "#FBBC03",
+                    borderColor: '#EA4335',
+                    glyph: meetingPlace.label,
+                });
+                let marker = new AdvancedMarkerElement({
+                    position: meetingPlace.coordinate,
+                    map: map,
+                    content: pin.element,
+                    title: meetingPlace.label,
+                });
+                marker.addListener('click', () => {
+                    infoWindow.close()
+                    infoWindow.setContent(infoWindowContent)
+                    infoWindow.open(marker.map, marker)
+                })
+            }
+            
+            let marker =  new google.maps.Marker({
+                position: {
+                    lat: {{ center.coordinate.0}},
+                    lng: {{ center.coordinate.1}}
+                },
+                map: map,
+                label: {
+                    text: 'Center',
+                    className: 'marker-center'
+                },
+            });
+        }
+
+        function copyURLToClipboard() {
+            const url = window.location.href
+            navigator
+                .clipboard
+                .writeText(url)
+                .then(
+                    function() {
+                        const currentText = copyURLButton.innerHTML
+                        copyURLButton.innerHTML = '&#10004; Result URL copied to clipboard!'
+                        setTimeout(function() {
+                            copyURLButton.innerHTML = currentText
+                        }, 2000)
+                    },
+                    console.error
+                )
+        }
+
+        copyURLButton.addEventListener('click', copyURLToClipboard)
+    </script>
+
+    <!-- Loads maps library (with places library) and then calls initMap() -->
+    <script async defer
+        src="https://maps.googleapis.com/maps/api/js?libraries=places&callback=initMap&key={{ embed_api_key }}">
+        </script>
+
+</body>
+
+
+
+
+</html>

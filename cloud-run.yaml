@@ -1,0 +1,67 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: centhroid
+  labels:
+    cloud.googleapis.com/location: asia-southeast1
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen1
+        autoscaling.knative.dev/minScale: '0'
+        autoscaling.knative.dev/maxScale: '20'
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      serviceAccountName: cloud-run@data-experiment-21.iam.gserviceaccount.com
+      containers:
+      - image: asia.gcr.io/data-experiment-21/centhroid:1.9.0
+        ports:
+        - name: http1
+          containerPort: 80
+        env:
+        - name: ENVIRONMENT
+          value: production
+        - name: ALLOWED_HOSTS
+          value: centhroid.com;centhroid-im3cvvb75a-as.a.run.app;127.0.0.1
+        - name: LOG_LEVEL
+          value: INFO
+        - name: DJANGO_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              key: '1'
+              name: django-secret
+        - name: MAPS_GEOCODE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: '1'
+              name: maps-geocoding-api-prod
+        - name: MAPS_EMBED_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: '1'
+              name: maps-embed-api-prod
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 512Mi
+        livenessProbe:
+          initialDelaySeconds: 60
+          timeoutSeconds: 60
+          periodSeconds: 3600
+          failureThreshold: 2
+          httpGet:
+            path: /
+            port: 80
+        startupProbe:
+          timeoutSeconds: 240
+          periodSeconds: 240
+          failureThreshold: 1
+          tcpSocket:
+            port: 80
+  traffic:
+  - percent: 100
+    latestRevision: true
